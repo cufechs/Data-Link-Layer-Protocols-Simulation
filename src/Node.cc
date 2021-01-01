@@ -225,7 +225,12 @@ void Node::applyError_Modification(MyPacket* pak){
        std::string mypayload= pak->getPayload();
        int msgSize = mypayload.size();
        int random = rand() % msgSize;
-       mypayload[random] = mypayload[random]+8;
+
+       std::bitset<8> chr(mypayload[random]);
+       int random2 = rand() % 8;
+       chr[random2] = !chr[random2];
+
+       mypayload[random] = (char)chr.to_ulong();
        pak->setPayload(mypayload);
     }
 }
