@@ -29,6 +29,9 @@ void Node::handleMessage(cMessage *msg)
     if (msg->isSelfMessage()) { // Host wants to send
 
         if(strcmp(msg->getName(),SEND_DATA_MSG)==0){ // I need to send a data packet
+            //==================================================//
+            //=======           Sending Data Packet      =======//
+            //==================================================//
 
             bubble("Will send a msg");
 
@@ -97,6 +100,10 @@ void Node::handleMessage(cMessage *msg)
                 addSlidingWindowParameter(window_pars.next_frame_to_send, -1);
         }
         else {
+            //==================================================//
+            //=======         Acknowledge timeout        =======//
+            //==================================================//
+
             // Canceling any "to send data" timer
             //for(int i=0; i<(int)NextFrameToSendTimer_vec.size(); i++)
             //    cancelEvent(NextFrameToSendTimer_vec[i]);   //Canceling all planned msg that was to be sent
@@ -116,11 +123,19 @@ void Node::handleMessage(cMessage *msg)
 
     }
     else {
+        //==================================================//
+        //=======         Receiving a Packet         =======//
+        //==================================================//
+
+
         auto *mPack = check_and_cast<MyPacket *>(msg);
 
         int packetType = mPack->getType();
 
         if(packetType == DATA_AND_ACK){
+            //==================================================//
+            //=======       Receiving Data Packet        =======//
+            //==================================================//
 
             if(CheckSumBits(mPack->getPayload(), mPack->getCheckSum())){ // Check msg validity
                 if(mPack->getSeqNum() == window_pars.frame_expected){ // check that this is the packet i am waiting for
