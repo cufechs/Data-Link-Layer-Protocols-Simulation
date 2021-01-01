@@ -50,14 +50,6 @@ void Node::handleMessage(cMessage *msg)
             applyError_Modification(mPack);
 
 
-            send(mPack, "outs", PairingWith);
-
-            EV << "Sent to node " << (PairingWith>=getIndex()? PairingWith+1 : PairingWith)
-                << ", Packet Type: DATA_AND_ACK"
-                << ", Sequence number: " << mPack->getSeqNum()
-                << ", Payload: " << mPack->getPayload()
-                << ", Ack number: " << mPack->getAckNum();
-
             msg = new cMessage(SEND_DATA_MSG);
             NextFrameToSendTimer_vec.push_back(msg);
             scheduleAt(simTime() + SEND_DATA_WAIT_TIME, msg);
@@ -66,6 +58,23 @@ void Node::handleMessage(cMessage *msg)
             msg = new cMessage(c);
             scheduleAt(simTime() + ACK_TIMEOUT, msg);
             AckTimeOut_vec.push_back(msg);
+
+
+            if(!applyError_Loss()){
+                send(mPack, "outs", PairingWith);
+
+                EV << "Sent to node " << (PairingWith>=getIndex()? PairingWith+1 : PairingWith)
+                    << ", Packet Type: DATA_AND_ACK"
+                    << ", Sequence number: " << mPack->getSeqNum()
+                    << ", Payload: " << mPack->getPayload()
+                    << ", Ack number: " << mPack->getAckNum();
+            }
+            else{
+                delete(mPack);
+
+                EV << "Packet lost in its way to node "
+                    << (PairingWith>=getIndex()? PairingWith+1 : PairingWith);
+            }
 
 
             addSlidingWindowParameter(window_pars.next_frame_to_send, 1);
@@ -233,4 +242,9 @@ void Node::applyError_Modification(MyPacket* pak){
        mypayload[random] = (char)chr.to_ulong();
        pak->setPayload(mypayload);
     }
+}
+
+bool Node::applyError_Loss(){
+    //return true if the packet will get lost
+    return (rand() % 100) < par("Loss_prob").doubleValue();
 }

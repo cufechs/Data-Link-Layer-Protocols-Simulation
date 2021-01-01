@@ -43,6 +43,7 @@ protected:
     bool CheckSumBits(std::string payload, std::bitset<8> chr);
 
     void applyError_Modification(MyPacket* pak);
+    bool applyError_Loss();
 };
 
 #endif
