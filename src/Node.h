@@ -44,6 +44,7 @@ protected:
 
     void applyError_Modification(MyPacket* pak);
     bool applyError_Loss();
+    bool applyError_Duplication();
 };
 
 #endif

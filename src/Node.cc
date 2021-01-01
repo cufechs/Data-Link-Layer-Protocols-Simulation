@@ -68,6 +68,14 @@ void Node::handleMessage(cMessage *msg)
                     << ", Sequence number: " << mPack->getSeqNum()
                     << ", Payload: " << mPack->getPayload()
                     << ", Ack number: " << mPack->getAckNum();
+
+                if(applyError_Duplication()){
+                    auto * dubPack = mPack->dup();
+
+                    send(dubPack, "outs", PairingWith);
+
+                    EV << ", Packet is duplicated";
+                }
             }
             else{
                 delete(mPack);
@@ -247,4 +255,9 @@ void Node::applyError_Modification(MyPacket* pak){
 bool Node::applyError_Loss(){
     //return true if the packet will get lost
     return (rand() % 100) < par("Loss_prob").doubleValue();
+}
+
+bool Node::applyError_Duplication(){
+    //return true if the packet will get lost
+    return (rand() % 100) < par("Duplication_prob").doubleValue();
 }
