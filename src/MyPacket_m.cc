@@ -183,8 +183,8 @@ MyPacket::MyPacket(const char *name, short kind) : ::omnetpp::cPacket(name,kind)
 {
     this->seqNum = 0;
     this->type = 0;
+    this->AckNum = 0;
     this->source = 0;
-    this->destination = 0;
 }
 
 MyPacket::MyPacket(const MyPacket& other) : ::omnetpp::cPacket(other)
@@ -209,8 +209,8 @@ void MyPacket::copy(const MyPacket& other)
     this->seqNum = other.seqNum;
     this->type = other.type;
     this->payload = other.payload;
+    this->AckNum = other.AckNum;
     this->source = other.source;
-    this->destination = other.destination;
     this->checkSum = other.checkSum;
 }
 
@@ -220,8 +220,8 @@ void MyPacket::parsimPack(omnetpp::cCommBuffer *b) const
     doParsimPacking(b,this->seqNum);
     doParsimPacking(b,this->type);
     doParsimPacking(b,this->payload);
+    doParsimPacking(b,this->AckNum);
     doParsimPacking(b,this->source);
-    doParsimPacking(b,this->destination);
     doParsimPacking(b,this->checkSum);
 }
 
@@ -231,8 +231,8 @@ void MyPacket::parsimUnpack(omnetpp::cCommBuffer *b)
     doParsimUnpacking(b,this->seqNum);
     doParsimUnpacking(b,this->type);
     doParsimUnpacking(b,this->payload);
+    doParsimUnpacking(b,this->AckNum);
     doParsimUnpacking(b,this->source);
-    doParsimUnpacking(b,this->destination);
     doParsimUnpacking(b,this->checkSum);
 }
 
@@ -261,9 +261,19 @@ const char * MyPacket::getPayload() const
     return this->payload.c_str();
 }
 
-void MyPacket::setPayload(const char * payload)
+void MyPacket::setPayload(std::string payload)
 {
     this->payload = payload;
+}
+
+int MyPacket::getAckNum() const
+{
+    return this->AckNum;
+}
+
+void MyPacket::setAckNum(int AckNum)
+{
+    this->AckNum = AckNum;
 }
 
 int MyPacket::getSource() const
@@ -274,16 +284,6 @@ int MyPacket::getSource() const
 void MyPacket::setSource(int source)
 {
     this->source = source;
-}
-
-int MyPacket::getDestination() const
-{
-    return this->destination;
-}
-
-void MyPacket::setDestination(int destination)
-{
-    this->destination = destination;
 }
 
 bits& MyPacket::getCheckSum()
@@ -395,8 +395,8 @@ const char *MyPacketDescriptor::getFieldName(int field) const
         "seqNum",
         "type",
         "payload",
+        "AckNum",
         "source",
-        "destination",
         "checkSum",
     };
     return (field>=0 && field<6) ? fieldNames[field] : nullptr;
@@ -409,8 +409,8 @@ int MyPacketDescriptor::findField(const char *fieldName) const
     if (fieldName[0]=='s' && strcmp(fieldName, "seqNum")==0) return base+0;
     if (fieldName[0]=='t' && strcmp(fieldName, "type")==0) return base+1;
     if (fieldName[0]=='p' && strcmp(fieldName, "payload")==0) return base+2;
-    if (fieldName[0]=='s' && strcmp(fieldName, "source")==0) return base+3;
-    if (fieldName[0]=='d' && strcmp(fieldName, "destination")==0) return base+4;
+    if (fieldName[0]=='A' && strcmp(fieldName, "AckNum")==0) return base+3;
+    if (fieldName[0]=='s' && strcmp(fieldName, "source")==0) return base+4;
     if (fieldName[0]=='c' && strcmp(fieldName, "checkSum")==0) return base+5;
     return basedesc ? basedesc->findField(fieldName) : -1;
 }
@@ -501,8 +501,8 @@ std::string MyPacketDescriptor::getFieldValueAsString(void *object, int field, i
         case 0: return long2string(pp->getSeqNum());
         case 1: return long2string(pp->getType());
         case 2: return oppstring2string(pp->getPayload());
-        case 3: return long2string(pp->getSource());
-        case 4: return long2string(pp->getDestination());
+        case 3: return long2string(pp->getAckNum());
+        case 4: return long2string(pp->getSource());
         case 5: return pp->getCheckSum().to_string();
         default: return "";
     }
@@ -521,8 +521,8 @@ bool MyPacketDescriptor::setFieldValueAsString(void *object, int field, int i, c
         case 0: pp->setSeqNum(string2long(value)); return true;
         case 1: pp->setType(string2long(value)); return true;
         case 2: pp->setPayload((value)); return true;
-        case 3: pp->setSource(string2long(value)); return true;
-        case 4: pp->setDestination(string2long(value)); return true;
+        case 3: pp->setAckNum(string2long(value)); return true;
+        case 4: pp->setSource(string2long(value)); return true;
         default: return false;
     }
 }

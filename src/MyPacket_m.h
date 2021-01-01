@@ -34,8 +34,8 @@
  *     int seqNum;
  *     int type;
  *     string payload;
+ *     int AckNum;
  *     int source;
- *     int destination;
  *     bits checkSum;
  * }
  * </pre>
@@ -46,8 +46,8 @@ class MyPacket : public ::omnetpp::cPacket
     int seqNum;
     int type;
     ::omnetpp::opp_string payload;
+    int AckNum;
     int source;
-    int destination;
     bits checkSum;
 
   private:
@@ -72,11 +72,11 @@ class MyPacket : public ::omnetpp::cPacket
     virtual int getType() const;
     virtual void setType(int type);
     virtual const char * getPayload() const;
-    virtual void setPayload(const char * payload);
+    virtual void setPayload(std::string payload);
+    virtual int getAckNum() const;
+    virtual void setAckNum(int AckNum);
     virtual int getSource() const;
     virtual void setSource(int source);
-    virtual int getDestination() const;
-    virtual void setDestination(int destination);
     virtual bits& getCheckSum();
     virtual const bits& getCheckSum() const {return const_cast<MyPacket*>(this)->getCheckSum();}
     virtual void setCheckSum(const bits& checkSum);

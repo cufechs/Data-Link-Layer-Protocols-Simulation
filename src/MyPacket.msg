@@ -26,7 +26,7 @@ packet MyPacket {
     int seqNum;
     int type;
     string payload;
+    int AckNum;
     int source;
-    int destination;
     bits checkSum;
 }
