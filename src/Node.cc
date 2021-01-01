@@ -61,13 +61,20 @@ void Node::handleMessage(cMessage *msg)
 
 
             if(!applyError_Loss()){
-                send(mPack, "outs", PairingWith);
 
                 EV << "Sent to node " << (PairingWith>=getIndex()? PairingWith+1 : PairingWith)
                     << ", Packet Type: DATA_AND_ACK"
                     << ", Sequence number: " << mPack->getSeqNum()
                     << ", Payload: " << mPack->getPayload()
                     << ", Ack number: " << mPack->getAckNum();
+
+                if(applyError_Delay()){
+                    double delay = Error_delayTime();
+                    sendDelayed(mPack, delay, "outs", PairingWith);
+                    EV << ", Packet is delayed by " << delay;
+                }
+                else
+                    send(mPack, "outs", PairingWith);
 
                 if(applyError_Duplication()){
                     auto * dubPack = mPack->dup();
@@ -260,4 +267,16 @@ bool Node::applyError_Loss(){
 bool Node::applyError_Duplication(){
     //return true if the packet will get lost
     return (rand() % 100) < par("Duplication_prob").doubleValue();
+}
+
+bool Node::applyError_Delay(){
+    //return true if the packet will get delayed
+    return (rand() % 100) < par("Delays_prob").doubleValue();
+}
+
+double Node::Error_delayTime(){
+    //return the delay time, where  0 < delay < Max_Delay_time
+
+    double f = (double)rand() / RAND_MAX;
+    return f * par("Max_Delay_time").doubleValue();
 }

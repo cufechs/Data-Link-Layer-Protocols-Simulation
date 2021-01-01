@@ -45,6 +45,8 @@ protected:
     void applyError_Modification(MyPacket* pak);
     bool applyError_Loss();
     bool applyError_Duplication();
+    bool applyError_Delay();
+    double Error_delayTime();
 };
 
 #endif
