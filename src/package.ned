@@ -12,7 +12,7 @@ network Network
     submodules:
         nodes[n]: Node;
         parent: Parent {
-            @display("is=vl");
+            @display("is=l");
         }
     connections:
         for i=0..sizeof(nodes)-1, for j=i+1..sizeof(nodes)-1 {

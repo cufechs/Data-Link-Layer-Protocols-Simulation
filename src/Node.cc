@@ -1,18 +1,3 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 #include "Node.h"
 
 Define_Module(Node);
@@ -20,38 +5,81 @@ Define_Module(Node);
 
 void Node::initialize()
 {
+    InDuty = false;
+    bufferSize = 0;
+
+    for(int i=0; i<=MAX_SEQ; i++){
+        msg_buffer.push_back("");
+        receiving_buffer.push_back("");
+    }
 }
 
 void Node::handleMessage(cMessage *msg)
 {
 
-
     if (msg->isSelfMessage()) { // Host wants to send
+
+        if(!InDuty){
+            delete(msg);
+            return;
+        }
+
 
         if(strcmp(msg->getName(),SEND_DATA_MSG)==0){ // I need to send a data packet
             //==================================================//
             //=======           Sending Data Packet      =======//
             //==================================================//
 
-            bubble("Will send a msg");
+            //bubble("Will send a msg");
+            //Debuging
+            std::string s11 = "Sl: " + std::to_string(window_pars.Sl) + ", Sf: " + std::to_string(window_pars.Sf);
+            const char* trwe = s11.c_str();
+            bubble(trwe);
+
 
             NextFrameToSendTimer_vec.erase(NextFrameToSendTimer_vec.begin());
             delete(msg);
 
             auto * mPack = new MyPacket();
-            mPack->setPayload("just for testing");
             mPack->setType(DATA_AND_ACK);
             mPack->setAckNum(window_pars.frame_expected);
             mPack->setSeqNum(window_pars.next_frame_to_send);
-            mPack->setCheckSum(GenerateCheckSumBits(mPack->getPayload()));
+
+
+            if(bufferSize > 0){
+                mPack->setPayload(msg_buffer[window_pars.next_frame_to_send]);
+                mPack->setCheckSum(GenerateCheckSumBits(msg_buffer[window_pars.next_frame_to_send]));
+            }
+            else{   // File data is all sent, Ending session
+
+                InDuty = false;
+
+                for(int i=0; i<(int)NextFrameToSendTimer_vec.size(); i++)
+                    cancelAndDelete(NextFrameToSendTimer_vec[i]);
+
+                for(int i=0; i<(int)AckTimeOut_vec.size(); i++)
+                    cancelAndDelete(AckTimeOut_vec[i]);
+
+                NextFrameToSendTimer_vec.clear();
+                AckTimeOut_vec.clear();
+
+                mPack->setSource(getIndex());
+                send(mPack, "outParent");
+
+                auto EndSesPack = new MyPacket();
+                EndSesPack->setType(END_SESSION);
+                send(EndSesPack, "outs", PairingWith);
+
+                file.close();
+
+                return;
+            }
 
 
             //TODO: Apply framing
 
 
-            //TODO: Add random error to payload
             applyError_Modification(mPack);
-
 
             msg = new cMessage(SEND_DATA_MSG);
             NextFrameToSendTimer_vec.push_back(msg);
@@ -68,8 +96,9 @@ void Node::handleMessage(cMessage *msg)
                 EV << "Sent to node " << (PairingWith>=getIndex()? PairingWith+1 : PairingWith)
                     << ", Packet Type: DATA_AND_ACK"
                     << ", Sequence number: " << mPack->getSeqNum()
-                    << ", Payload: " << mPack->getPayload()
-                    << ", Ack number: " << mPack->getAckNum();
+                    << ", Ack number: " << mPack->getAckNum()
+                    << "\nPayload: " << mPack->getPayload();
+
 
                 if(applyError_Delay()){
                     double delay = Error_delayTime();
@@ -91,11 +120,11 @@ void Node::handleMessage(cMessage *msg)
                 delete(mPack);
 
                 EV << "Packet lost in its way to node "
-                    << (PairingWith>=getIndex()? PairingWith+1 : PairingWith);
+                    << (PairingWith>=getIndex()? PairingWith+1 : PairingWith) << "\n";
             }
 
 
-            addSlidingWindowParameter(window_pars.next_frame_to_send, 1);
+            incSlidingWindowParameter(window_pars.next_frame_to_send);
             if(!between(window_pars.Sl, window_pars.next_frame_to_send, window_pars.Sf)) // Don't think it may happen
                 addSlidingWindowParameter(window_pars.next_frame_to_send, -1);
         }
@@ -114,6 +143,8 @@ void Node::handleMessage(cMessage *msg)
             AckTimeOut_vec.clear();
 
             window_pars.next_frame_to_send = atoi(msg->getName());
+
+            EV << "Ack time out, resending packet of index " << window_pars.next_frame_to_send << "\n";
 
             const char * c = std::to_string(window_pars.next_frame_to_send).c_str();
             msg = new cMessage(c);
@@ -139,7 +170,9 @@ void Node::handleMessage(cMessage *msg)
 
             if(CheckSumBits(mPack->getPayload(), mPack->getCheckSum())){ // Check msg validity
                 if(mPack->getSeqNum() == window_pars.frame_expected){ // check that this is the packet i am waiting for
+                    receiving_buffer[window_pars.frame_expected] = mPack->getPayload();
                     incSlidingWindowParameter(window_pars.frame_expected);
+                    bubble("Thanks!");
                 }
             }
 
@@ -148,15 +181,26 @@ void Node::handleMessage(cMessage *msg)
 
             window_pars.next_frame_to_send = (seq_nr)mPack->getAckNum();
 
+			addSlidingWindowParameter(ackReceived, -1);
+
             while(between(window_pars.Sl, ackReceived, window_pars.Sf)){
                 incSlidingWindowParameter(window_pars.Sl);
                 incSlidingWindowParameter(window_pars.Sf);
+
+                bufferSize--;
+
+                std::string line;
+                if(std::getline(file, line)){ // Adding data to the buffer
+                    msg_buffer[window_pars.Sf] = line;
+                    bufferSize++;
+                }
 
                 if(AckTimeOut_vec.size() > 0){ // Canceling an ack timeout
                     cancelAndDelete(AckTimeOut_vec[0]);
                     AckTimeOut_vec.erase(AckTimeOut_vec.begin());
                 }
             }
+
 
 
             /*EV << "Received at node " << getIndex()
@@ -174,9 +218,35 @@ void Node::handleMessage(cMessage *msg)
 
         else if(packetType == START_SESSION){
 
+            InDuty = true;
+
+            do { // Opening text file
+                int r = (rand() % 32) + 1;
+                std::string dir = "C:/Users/adham/OneDrive/Desktop/Data_files/File_" + std::to_string(r) + ".txt";
+                file.open(dir.c_str());
+            } while (!file.is_open());
+
+            /*do { // Opening text file
+                int r = getIndex();
+                std::string dir = "C:/Users/adham/OneDrive/Desktop/Data_files/" + std::to_string(r) + ".txt";
+                file.open(dir.c_str());
+            } while (!file.is_open());*/
+
             initParameters(window_pars);
 
+            std::string line;
+            seq_nr temp_ptr = window_pars.next_frame_to_send;
+            while(between(window_pars.Sl, temp_ptr, window_pars.Sf)){
+                if(std::getline(file, line)){
+                    msg_buffer[temp_ptr] = line;
+                    bufferSize++;
+                }
+                incSlidingWindowParameter(temp_ptr);
+            }
+
             PairingWith = mPack->getSource();
+            if (PairingWith > getIndex())
+                PairingWith--;
 
             msg = new cMessage(SEND_DATA_MSG);
             NextFrameToSendTimer_vec.push_back(msg);
@@ -190,20 +260,60 @@ void Node::handleMessage(cMessage *msg)
 
         }
         else if(packetType == END_SESSION){
+
+            InDuty = false;
+            file.close();
+            bufferSize = 0;
+
+            for(int i=0; i<(int)NextFrameToSendTimer_vec.size(); i++)
+                cancelAndDelete(NextFrameToSendTimer_vec[i]);
+
+            for(int i=0; i<(int)AckTimeOut_vec.size(); i++)
+                cancelAndDelete(AckTimeOut_vec[i]);
+
+            NextFrameToSendTimer_vec.clear();
+            AckTimeOut_vec.clear();
+
             mPack->setSource(getIndex());
             send(mPack, "outParent");
 
             EV << "Received at node " << getIndex()
                 << ", Packet Type: End_SESSION";
         }
-
         else if(packetType == ASSIGN_PAIR){
+
+            InDuty = true;
+
+            do { // Opening text file
+                int r = (rand() % 32) + 1;
+                std::string dir = "C:/Users/adham/OneDrive/Desktop/Data_files/File_" + std::to_string(r) + ".txt";
+                file.open(dir.c_str());
+            } while (!file.is_open());
+
+            /*do { // Opening text file
+                int r = getIndex();
+                std::string dir = "C:/Users/adham/OneDrive/Desktop/Data_files/" + std::to_string(r) + ".txt";
+                file.open(dir.c_str());
+            } while (!file.is_open());*/
+
+            initParameters(window_pars);
+
+            std::string line;
+            seq_nr temp_ptr = window_pars.next_frame_to_send;
+            while(between(window_pars.Sl, temp_ptr, window_pars.Sf)){
+                if(std::getline(file, line)){
+                    msg_buffer[temp_ptr] = line;
+                    bufferSize++;
+                }
+                incSlidingWindowParameter(temp_ptr);
+            }
+
 
             EV << "Received at node " << getIndex()
                 << ", Packet Type: ASSIGN_PAIR"
                 << ", Payload: " << mPack->getSource();
 
-            initParameters(window_pars);
+
 
             mPack->setType(START_SESSION);
             PairingWith = mPack->getSource();
@@ -244,14 +354,14 @@ bool Node::CheckSumBits(std::string payload, std::bitset<8> checksum){
     for(int i=0; i<payload.size();i++){
         int temp = (int)(chr.to_ulong()) + payload.at(i);
         chr = std::bitset<9>(temp);
-        while(chr[8]){
+        if(chr[8]){
             chr[8] = 0;
             temp = (int)(chr.to_ulong()) + 1;
             chr = std::bitset<9>(temp);
         }
     }
     std::bitset<8> out;
-    for(int i=0; i<8; i++)
+    for(int i=0; i<8; i++) //Todo: update this
         if(chr[i] == 0)
             return false;
 

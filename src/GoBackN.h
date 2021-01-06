@@ -55,7 +55,7 @@ static void addSlidingWindowParameter(seq_nr &f, int val){
 }
 
 static void incSlidingWindowParameter(seq_nr &f){
-    f = (seq_nr)((unsigned int)f + 1) % (MAX_SEQ+1);
+    f = (seq_nr)(f + 1) % (MAX_SEQ+1);
 }
 
 #endif /* GOBACKN_H_ */
