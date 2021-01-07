@@ -35,6 +35,9 @@ protected:
     std::bitset<8> GenerateCheckSumBits(std::string payload);
     bool CheckSumBits(std::string payload, std::bitset<8> chr);
 
+    std::string Framing(std::string payld);
+    std::string Deframing(std::string payld);
+
     void applyError_Modification(MyPacket* pak);
     bool applyError_Loss();
     bool applyError_Duplication();

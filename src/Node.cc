@@ -129,6 +129,11 @@ void Node::handleMessage(cMessage *msg)
             }
 
 
+            //Applying framing
+            mPack->setPayload(Framing(mPack->getPayload()));
+
+
+
             // Setting timer
             msg = new cMessage(SEND_DATA_MSG);
             NextFrameToSendTimer_vec.push_back(msg);
@@ -230,6 +235,8 @@ void Node::handleMessage(cMessage *msg)
             //==================================================//
 
 
+            //Deframing
+            mPack->setPayload(Deframing(mPack->getPayload()));
 
             if(mPack->getSeqNum() == window_pars.frame_expected && CheckSumBits(mPack->getPayload(), mPack->getCheckSum())){    // check that this is the packet that I am waiting
                 receiving_buffer[window_pars.frame_expected] = mPack->getPayload();                                             // for (as a node) and Checking msg validity
@@ -244,7 +251,7 @@ void Node::handleMessage(cMessage *msg)
             window_pars.next_frame_to_send = (seq_nr)mPack->getAckNum();
 
             seq_nr ackReceived = (seq_nr)mPack->getAckNum();
-			addSlidingWindowParameter(ackReceived, -1);
+            addSlidingWindowParameter(ackReceived, -1);
 
             while(between(window_pars.first_frame_in_window, ackReceived, window_pars.last_frame_in_window)){
                 incSlidingWindowParameter(window_pars.first_frame_in_window);
@@ -433,6 +440,52 @@ bool Node::CheckSumBits(std::string payload, std::bitset<8> checksum){
     return true;
 }
 
+std::string Node::Framing(std::string mypayload){
+    char FLAG = (char)126;
+    char ESC = (char)224;
+    int counter = 0; //for framing
+    int length = mypayload.size();
+
+    for (int i = 0; i < (length + counter); i++)
+    {
+        if (mypayload[i] == FLAG || mypayload[i] == ESC) //flag
+        {
+            mypayload.resize(mypayload.size() + 1);
+            for (int j = (length + counter); j > i; j--)
+            {
+                mypayload[j] = mypayload[j - 1];
+            }
+            mypayload[i] = ESC;
+            counter = counter + 1;
+            i = i + 1;
+        }
+    }
+
+    mypayload = FLAG + mypayload + FLAG;
+
+    return mypayload;
+}
+
+std::string Node::Deframing(std::string mypayload){
+    char FLAG = (char)126;
+    char ESC = (char)224;
+    int counter = 0;
+    int length = mypayload.size();
+
+    for (int i = 0; i < (length - counter); i++)
+    {
+        if (mypayload[i] == FLAG || mypayload[i] == ESC) //flag
+        {
+            mypayload.resize(mypayload.size() - 1);
+            counter++;
+            for (int j = i; j < (length - counter - 1); j++)
+                mypayload[j] = mypayload[j + 1];
+        }
+    }
+    mypayload.resize(mypayload.size() - 1);
+
+    return mypayload;
+}
 
 void Node::applyError_Modification(MyPacket* pak){
     if((rand() % 100) < par("Modification_prob").doubleValue()){
