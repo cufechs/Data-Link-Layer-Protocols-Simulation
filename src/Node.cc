@@ -478,11 +478,10 @@ std::string Node::Deframing(std::string mypayload){
         {
             mypayload.resize(mypayload.size() - 1);
             counter++;
-            for (int j = i; j < (length - counter - 1); j++)
+            for (int j = i; j < (length - counter); j++)
                 mypayload[j] = mypayload[j + 1];
         }
     }
-    mypayload.resize(mypayload.size() - 1);
 
     return mypayload;
 }
