@@ -15,6 +15,11 @@ private:
     int freeNodesCount;
     int NumOfNodes;
 
+    int generatedFrames_count;
+    int droppedFrames_count;
+    int retransmittedFrames_count;
+    int usefulFrames_count;
+
 protected:
     virtual void initialize();
     virtual void handleMessage(cMessage *msg);

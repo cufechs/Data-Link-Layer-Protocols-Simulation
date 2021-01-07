@@ -5,11 +5,19 @@ Define_Module(Node);
 
 void Node::initialize()
 {
+    // Stats related
+    scheduleAt(par("Send_stat_time").doubleValue() - 0.0000001, new cMessage(STATS_MSG));
+
+
     InDuty = false;
     bufferSize = 0;
+    generatedFrames_count = 0;
+    droppedFrames_count = 0;
+    retransmittedFrames_count = 0;
+    usefulFrames_count = 0;
 
     for(int i=0; i<=MAX_SEQ; i++){
-        msg_buffer.push_back("");
+        msg_buffer.push_back(std::make_pair("", false));
         receiving_buffer.push_back("");
     }
 }
@@ -19,6 +27,39 @@ void Node::handleMessage(cMessage *msg)
 
     if (msg->isSelfMessage()) { // Host wants to send
 
+
+        if(strcmp(msg->getName(),STATS_MSG)==0){ // Send stats to parent
+            //AckNum and SeqNum data members are used for other purposes
+
+            delete(msg);
+
+            auto * mPack = new MyPacket();
+            mPack->setType(STATS_TYPE1);
+            mPack->setSource(getIndex());
+            mPack->setAckNum(generatedFrames_count);
+            mPack->setSeqNum(droppedFrames_count);
+            send(mPack, "outParent");
+
+            mPack = new MyPacket();
+            mPack->setType(STATS_TYPE2);
+            mPack->setSource(getIndex());
+            mPack->setAckNum(retransmittedFrames_count);
+            mPack->setSeqNum(usefulFrames_count);
+            send(mPack, "outParent");
+
+            // resetting counts
+            generatedFrames_count = 0;
+            droppedFrames_count = 0;
+            retransmittedFrames_count = 0;
+            usefulFrames_count = 0;
+
+            scheduleAt(simTime() + par("Send_stat_time").doubleValue(), new cMessage(STATS_MSG));
+
+            return;
+        }
+
+
+        // If the node in not in duty, then it is not expecting a self msg
         if(!InDuty){
             delete(msg);
             return;
@@ -30,11 +71,13 @@ void Node::handleMessage(cMessage *msg)
             //=======           Sending Data Packet      =======//
             //==================================================//
 
-            //bubble("Will send a msg");
+
             //Debuging
-            std::string s11 = "Sl: " + std::to_string(window_pars.Sl) + ", Sf: " + std::to_string(window_pars.Sf);
-            const char* trwe = s11.c_str();
-            bubble(trwe);
+            bubble("Will send a msg");
+            //std::string s11 = "Sf: " + std::to_string(window_pars.first_frame_in_window)
+            //                    + ", Sl: " + std::to_string(window_pars.last_frame_in_window);
+            //const char* trwe = s11.c_str();
+            //bubble(trwe);
 
 
             NextFrameToSendTimer_vec.erase(NextFrameToSendTimer_vec.begin());
@@ -47,10 +90,19 @@ void Node::handleMessage(cMessage *msg)
 
 
             if(bufferSize > 0){
-                mPack->setPayload(msg_buffer[window_pars.next_frame_to_send]);
-                mPack->setCheckSum(GenerateCheckSumBits(msg_buffer[window_pars.next_frame_to_send]));
+                mPack->setPayload(msg_buffer[window_pars.next_frame_to_send].first);
+                mPack->setCheckSum(GenerateCheckSumBits(msg_buffer[window_pars.next_frame_to_send].first));
+
+                if(msg_buffer[window_pars.next_frame_to_send].second == true) // This frame is being retransmitted
+                    retransmittedFrames_count++;
+                else
+                    msg_buffer[window_pars.next_frame_to_send].second = true;
             }
             else{   // File data is all sent, Ending session
+
+                //==================================================//
+                //=======           Ending Session           =======//
+                //==================================================//
 
                 InDuty = false;
 
@@ -63,6 +115,7 @@ void Node::handleMessage(cMessage *msg)
                 NextFrameToSendTimer_vec.clear();
                 AckTimeOut_vec.clear();
 
+                mPack->setType(END_SESSION);
                 mPack->setSource(getIndex());
                 send(mPack, "outParent");
 
@@ -76,22 +129,28 @@ void Node::handleMessage(cMessage *msg)
             }
 
 
-            //TODO: Apply framing
-
-
-            applyError_Modification(mPack);
-
+            // Setting timer
             msg = new cMessage(SEND_DATA_MSG);
             NextFrameToSendTimer_vec.push_back(msg);
             scheduleAt(simTime() + SEND_DATA_WAIT_TIME, msg);
 
+            // Setting Ack timeout timer
             const char * c = std::to_string(mPack->getSeqNum()).c_str();
             msg = new cMessage(c);
             scheduleAt(simTime() + ACK_TIMEOUT, msg);
             AckTimeOut_vec.push_back(msg);
 
 
+            //==================================================//
+            //=======          Sending a Packet          =======//
+
+
+            applyError_Modification(mPack);
+
+            generatedFrames_count++;
+
             if(!applyError_Loss()){
+
 
                 EV << "Sent to node " << (PairingWith>=getIndex()? PairingWith+1 : PairingWith)
                     << ", Packet Type: DATA_AND_ACK"
@@ -100,7 +159,7 @@ void Node::handleMessage(cMessage *msg)
                     << "\nPayload: " << mPack->getPayload();
 
 
-                if(applyError_Delay()){
+                if(applyError_Delay()){ // The packet is delayed
                     double delay = Error_delayTime();
                     sendDelayed(mPack, delay, "outs", PairingWith);
                     EV << ", Packet is delayed by " << delay;
@@ -108,24 +167,26 @@ void Node::handleMessage(cMessage *msg)
                 else
                     send(mPack, "outs", PairingWith);
 
-                if(applyError_Duplication()){
+                if(applyError_Duplication()){ // The packet is duplicated
+
+                    generatedFrames_count++;
+
                     auto * dubPack = mPack->dup();
-
                     send(dubPack, "outs", PairingWith);
-
                     EV << ", Packet is duplicated";
                 }
             }
-            else{
+            else{ // Packet is lost through transmission
                 delete(mPack);
 
                 EV << "Packet lost in its way to node "
                     << (PairingWith>=getIndex()? PairingWith+1 : PairingWith) << "\n";
             }
 
+            //==================================================//
 
             incSlidingWindowParameter(window_pars.next_frame_to_send);
-            if(!between(window_pars.Sl, window_pars.next_frame_to_send, window_pars.Sf)) // Don't think it may happen
+            if(!between(window_pars.first_frame_in_window, window_pars.next_frame_to_send, window_pars.last_frame_in_window)) // Don't think it may happen
                 addSlidingWindowParameter(window_pars.next_frame_to_send, -1);
         }
         else {
@@ -168,30 +229,33 @@ void Node::handleMessage(cMessage *msg)
             //=======       Receiving Data Packet        =======//
             //==================================================//
 
-            if(CheckSumBits(mPack->getPayload(), mPack->getCheckSum())){ // Check msg validity
-                if(mPack->getSeqNum() == window_pars.frame_expected){ // check that this is the packet i am waiting for
-                    receiving_buffer[window_pars.frame_expected] = mPack->getPayload();
-                    incSlidingWindowParameter(window_pars.frame_expected);
-                    bubble("Thanks!");
-                }
+
+
+            if(mPack->getSeqNum() == window_pars.frame_expected && CheckSumBits(mPack->getPayload(), mPack->getCheckSum())){    // check that this is the packet that I am waiting
+                receiving_buffer[window_pars.frame_expected] = mPack->getPayload();                                             // for (as a node) and Checking msg validity
+                incSlidingWindowParameter(window_pars.frame_expected);
+                usefulFrames_count++;
+                bubble("Thanks! Useful frame :)");
             }
+            else
+                droppedFrames_count++;
 
-
-            seq_nr ackReceived = (seq_nr)mPack->getAckNum();
 
             window_pars.next_frame_to_send = (seq_nr)mPack->getAckNum();
 
+            seq_nr ackReceived = (seq_nr)mPack->getAckNum();
 			addSlidingWindowParameter(ackReceived, -1);
 
-            while(between(window_pars.Sl, ackReceived, window_pars.Sf)){
-                incSlidingWindowParameter(window_pars.Sl);
-                incSlidingWindowParameter(window_pars.Sf);
+            while(between(window_pars.first_frame_in_window, ackReceived, window_pars.last_frame_in_window)){
+                incSlidingWindowParameter(window_pars.first_frame_in_window);
+                incSlidingWindowParameter(window_pars.last_frame_in_window);
 
                 bufferSize--;
 
                 std::string line;
                 if(std::getline(file, line)){ // Adding data to the buffer
-                    msg_buffer[window_pars.Sf] = line;
+                    msg_buffer[window_pars.last_frame_in_window].first = line;
+                    msg_buffer[window_pars.last_frame_in_window].second = false;
                     bufferSize++;
                 }
 
@@ -202,13 +266,11 @@ void Node::handleMessage(cMessage *msg)
             }
 
 
-
-            /*EV << "Received at node " << getIndex()
+            EV << "Received at node " << getIndex()
                 << ", Packet Type: DATA_AND_ACK"
                 << ", Sequence number: " << mPack->getSeqNum()
-                << ", Payload: " << mPack->getPayload()
-                << ", Ack number: " << mPack->getAckNum()
-                << ", number of ack variable: " << numOfAck;*/
+                << ", \nPayload: " << mPack->getPayload()
+                << ", Ack number: " << mPack->getAckNum();
 
             delete(mPack);
         }
@@ -222,7 +284,7 @@ void Node::handleMessage(cMessage *msg)
 
             do { // Opening text file
                 int r = (rand() % 32) + 1;
-                std::string dir = "C:/Users/adham/OneDrive/Desktop/Data_files/File_" + std::to_string(r) + ".txt";
+                std::string dir = DATA_FILE_DIRECTORY + std::to_string(r) + ".txt";
                 file.open(dir.c_str());
             } while (!file.is_open());
 
@@ -236,9 +298,10 @@ void Node::handleMessage(cMessage *msg)
 
             std::string line;
             seq_nr temp_ptr = window_pars.next_frame_to_send;
-            while(between(window_pars.Sl, temp_ptr, window_pars.Sf)){
+            while(between(window_pars.first_frame_in_window, temp_ptr, window_pars.last_frame_in_window)){
                 if(std::getline(file, line)){
-                    msg_buffer[temp_ptr] = line;
+                    msg_buffer[temp_ptr].first = line;
+                    msg_buffer[temp_ptr].second = false;
                     bufferSize++;
                 }
                 incSlidingWindowParameter(temp_ptr);
@@ -274,6 +337,7 @@ void Node::handleMessage(cMessage *msg)
             NextFrameToSendTimer_vec.clear();
             AckTimeOut_vec.clear();
 
+            mPack->setType(END_SESSION);
             mPack->setSource(getIndex());
             send(mPack, "outParent");
 
@@ -286,7 +350,7 @@ void Node::handleMessage(cMessage *msg)
 
             do { // Opening text file
                 int r = (rand() % 32) + 1;
-                std::string dir = "C:/Users/adham/OneDrive/Desktop/Data_files/File_" + std::to_string(r) + ".txt";
+                std::string dir = DATA_FILE_DIRECTORY + std::to_string(r) + ".txt";
                 file.open(dir.c_str());
             } while (!file.is_open());
 
@@ -300,9 +364,10 @@ void Node::handleMessage(cMessage *msg)
 
             std::string line;
             seq_nr temp_ptr = window_pars.next_frame_to_send;
-            while(between(window_pars.Sl, temp_ptr, window_pars.Sf)){
+            while(between(window_pars.first_frame_in_window, temp_ptr, window_pars.last_frame_in_window)){
                 if(std::getline(file, line)){
-                    msg_buffer[temp_ptr] = line;
+                    msg_buffer[temp_ptr].first = line;
+                    msg_buffer[temp_ptr].second = false;
                     bufferSize++;
                 }
                 incSlidingWindowParameter(temp_ptr);
@@ -367,6 +432,7 @@ bool Node::CheckSumBits(std::string payload, std::bitset<8> checksum){
 
     return true;
 }
+
 
 void Node::applyError_Modification(MyPacket* pak){
     if((rand() % 100) < par("Modification_prob").doubleValue()){

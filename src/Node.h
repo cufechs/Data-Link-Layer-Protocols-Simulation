@@ -20,9 +20,13 @@ private:
     std::vector<cMessage *> AckTimeOut_vec;
     std::vector<cMessage *> NextFrameToSendTimer_vec;
     bool InDuty;
-    std::vector<std::string> msg_buffer;
+    std::vector< std::pair<std::string, bool> > msg_buffer;
     std::vector<std::string> receiving_buffer;
     int bufferSize;
+    int generatedFrames_count;
+    int droppedFrames_count;
+    int retransmittedFrames_count;
+    int usefulFrames_count;
 
 protected:
     virtual void initialize();

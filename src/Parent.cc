@@ -3,7 +3,12 @@ Define_Module(Parent);
 
 void Parent::initialize()
 {
-    srand(time(0));
+    srand(time(0)); // Randomization related
+
+    generatedFrames_count = 0;
+    droppedFrames_count = 0;
+    retransmittedFrames_count = 0;
+    usefulFrames_count = 0;
 
     NumOfNodes = (int)gateSize("outs");
 
@@ -46,12 +51,12 @@ void Parent::handleMessage(cMessage *msg)
     srand(time(0));
 
     if (msg->isSelfMessage()) {
-        if(!((rand() % 100) < par("ProbabiltyToNoAssign").doubleValue())){
+        if(!((rand() % 100) < par("ProbabiltyToNotAssign").doubleValue())){
 
             for(int i=0; i<NumOfNodes; i++){
                 if(freeNodes[i] == false) // this node is already assigned
                     continue;
-                if(freeNodesCount < 2)
+                if(freeNodesCount < 2) // no more nodes to pairs to assign?
                     break;
 
                 freeNodesCount-=2;
@@ -73,15 +78,34 @@ void Parent::handleMessage(cMessage *msg)
         }
 
         delete msg;
-        double interval = par("refreshGap_TimeStep").doubleValue();
-        scheduleAt(simTime() + interval, new cMessage(""));
+        scheduleAt(simTime() + par("refreshGap_TimeStep").doubleValue(), new cMessage(""));
+
+        //Printing stats
+        EV << "The total number of generated frames is " << generatedFrames_count << "\n"
+                << "The total number of dropped frames is " << droppedFrames_count << "\n"
+                << "The total number of retransmitted frames is " << retransmittedFrames_count << "\n"
+                << "The total number of useful data transmitted is " << usefulFrames_count << "\n"
+                << "Percentage of useful data transmitted is " << ((double)usefulFrames_count/generatedFrames_count) * 100 << "%\n";
+
     }
     else{
         auto *mPack = check_and_cast<MyPacket *>(msg);
-        freeNodes[mPack->getSource()] = true;
-        freeNodesCount++;
+        if(mPack->getType() == END_SESSION){
+            freeNodes[mPack->getSource()] = true;
+            freeNodesCount++;
 
-        bubble((std::to_string(mPack->getSource()) + " is free, Okay").c_str());
+            bubble((std::to_string(mPack->getSource()) + " is free, Okay").c_str());
+        }
+        else if(mPack->getType() == STATS_TYPE1){
+            generatedFrames_count += mPack->getAckNum();
+            droppedFrames_count += mPack->getSeqNum();
+        }
+        else if(mPack->getType() == STATS_TYPE2){
+            retransmittedFrames_count += mPack->getAckNum();
+            usefulFrames_count += mPack->getSeqNum();
+        }
+
+
 
         delete msg;
     }
