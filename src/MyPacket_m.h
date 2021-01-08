@@ -27,7 +27,6 @@
  * Class generated from <tt>MyPacket.msg:25</tt> by nedtool.
  * <pre>
  * //
- * // TODO generated message class
  * //
  * packet MyPacket
  * {

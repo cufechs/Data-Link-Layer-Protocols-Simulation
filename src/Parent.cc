@@ -1,33 +1,24 @@
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
-
 #include "Parent.h"
 Define_Module(Parent);
 
 void Parent::initialize()
 {
-    srand(time(0));
+    srand(time(0)); // Randomization related
 
-    freeNodesCount = (int)gateSize("outs");
+    generatedFrames_count = 0;
+    droppedFrames_count = 0;
+    retransmittedFrames_count = 0;
+    usefulFrames_count = 0;
+
+    NumOfNodes = (int)gateSize("outs");
+
+    freeNodesCount = NumOfNodes;
 
     for(int i=0; i< (int)gateSize("outs"); i++)
         freeNodes.push_back(true);
 
-    std::vector<int> toErase;
 
-    for(int i=0; i< (int)freeNodes.size(); i++){
+    for(int i=(int)freeNodes.size()-1; i>=0; i--){
         if(freeNodes[i] == false) // this node is already assigned
             continue;
         if(freeNodesCount < 2)
@@ -36,9 +27,9 @@ void Parent::initialize()
         freeNodesCount-=2;
         freeNodes[i] = false;
 
-        int random = rand() % gateSize("outs"); //random from 0 to n
+        int random = rand() % NumOfNodes; //random from 0 to n
         do { //Avoid sending to yourself or assigned node
-            random = rand() % gateSize("outs");
+            random = rand() % NumOfNodes;
         } while(!freeNodes[random]);
 
         freeNodes[random] = false;
@@ -56,20 +47,24 @@ void Parent::initialize()
 
 void Parent::handleMessage(cMessage *msg)
 {
+
+    srand(time(0));
+
     if (msg->isSelfMessage()) {
-        if((rand() % 100) < par("ProbabiltyToNoAssign").doubleValue()){
-            for(int i=0; i<(int)freeNodes.size(); i++){
+        if(!((rand() % 100) < par("ProbabiltyToNotAssign").doubleValue())){
+
+            for(int i=0; i<NumOfNodes; i++){
                 if(freeNodes[i] == false) // this node is already assigned
                     continue;
-                if(freeNodesCount < 2)
+                if(freeNodesCount < 2) // no more nodes to pairs to assign?
                     break;
 
                 freeNodesCount-=2;
                 freeNodes[i] = false;
 
-                int random = rand() % gateSize("outs"); //random from 0 to n
+                int random = rand() % NumOfNodes; //random from 0 to n
                 do { //Avoid sending to yourself or assigned node
-                    random = rand() % gateSize("outs");
+                    random = rand() % NumOfNodes;
                 } while(!freeNodes[random]);
 
                 freeNodes[random] = false;
@@ -83,13 +78,35 @@ void Parent::handleMessage(cMessage *msg)
         }
 
         delete msg;
-        double interval = par("refreshGap_TimeStep").doubleValue();
-        scheduleAt(simTime() + interval, new cMessage(""));
+        scheduleAt(simTime() + par("refreshGap_TimeStep").doubleValue(), new cMessage(""));
+
+        //Printing stats
+        EV << "The total number of generated frames is " << generatedFrames_count << "\n"
+                << "The total number of dropped frames is " << droppedFrames_count << "\n"
+                << "The total number of retransmitted frames is " << retransmittedFrames_count << "\n"
+                << "The total number of useful data transmitted is " << usefulFrames_count << "\n"
+                << "Percentage of useful data transmitted is " << ((double)usefulFrames_count/generatedFrames_count) * 100 << "%\n";
+
     }
     else{
         auto *mPack = check_and_cast<MyPacket *>(msg);
-        freeNodes[atoi(mPack->getPayload())] = true;
-        freeNodesCount++;
+        if(mPack->getType() == END_SESSION){
+            freeNodes[mPack->getSource()] = true;
+            freeNodesCount++;
+
+            bubble((std::to_string(mPack->getSource()) + " is free, Okay").c_str());
+        }
+        else if(mPack->getType() == STATS_TYPE1){
+            generatedFrames_count += mPack->getAckNum();
+            droppedFrames_count += mPack->getSeqNum();
+        }
+        else if(mPack->getType() == STATS_TYPE2){
+            retransmittedFrames_count += mPack->getAckNum();
+            usefulFrames_count += mPack->getSeqNum();
+        }
+
+
+
         delete msg;
     }
 }
