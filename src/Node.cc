@@ -212,10 +212,10 @@ void Node::handleMessage(cMessage *msg)
 
             EV << "Ack time out, resending packet of index " << window_pars.next_frame_to_send << "\n";
 
-            const char * c = std::to_string(window_pars.next_frame_to_send).c_str();
+            /*const char * c = std::to_string(window_pars.next_frame_to_send).c_str();
             msg = new cMessage(c);
             scheduleAt(simTime() + ACK_TIMEOUT, msg);
-            AckTimeOut_vec.push_back(msg);
+            AckTimeOut_vec.push_back(msg);*/
         }
 
     }
