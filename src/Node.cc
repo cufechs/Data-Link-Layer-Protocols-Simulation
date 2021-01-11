@@ -212,10 +212,10 @@ void Node::handleMessage(cMessage *msg)
 
             EV << "Ack time out, resending packet of index " << window_pars.next_frame_to_send << "\n";
 
-            const char * c = std::to_string(window_pars.next_frame_to_send).c_str();
+            /*const char * c = std::to_string(window_pars.next_frame_to_send).c_str();
             msg = new cMessage(c);
             scheduleAt(simTime() + ACK_TIMEOUT, msg);
-            AckTimeOut_vec.push_back(msg);
+            AckTimeOut_vec.push_back(msg);*/
         }
 
     }
@@ -290,7 +290,7 @@ void Node::handleMessage(cMessage *msg)
             InDuty = true;
 
             do { // Opening text file
-                int r = (rand() % 32) + 1;
+                int r = (rand() % 6) + 1;
                 std::string dir = DATA_FILE_DIRECTORY + std::to_string(r) + ".txt";
                 file.open(dir.c_str());
             } while (!file.is_open());
@@ -387,10 +387,12 @@ void Node::handleMessage(cMessage *msg)
 
 
 
-            mPack->setType(START_SESSION);
+
             PairingWith = mPack->getSource();
             if (PairingWith > getIndex())
                 PairingWith--;
+
+            mPack->setType(START_SESSION);
             mPack->setSource(getIndex());
             send(mPack, "outs", PairingWith);
 

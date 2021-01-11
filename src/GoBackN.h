@@ -15,7 +15,7 @@
 #define ACK_TIMEOUT 4
 //#define WAIT_FOR_DATA_TO_PIGGYBACK_TIMEOUT 1
 #define SEND_DATA_WAIT_TIME 0.5
-#define DATA_FILE_DIRECTORY "C:/Users/adham/OneDrive/Desktop/Data_files/File_"
+#define DATA_FILE_DIRECTORY "C:/Users/adham/OneDrive/Desktop/Data_files/node" // "C:/Users/adham/OneDrive/Desktop/Data_files/File_"
 
 //Self message
 #define SEND_DATA_MSG "go send some data"
